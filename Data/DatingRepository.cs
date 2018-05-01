@@ -25,6 +25,11 @@ namespace DatingApp.API.Data
             _context.Remove(entity);
         }
 
+        public async Task<Like> GetLike(int userId, int recipientId)
+        {
+            return await _context.Likes.FirstOrDefaultAsync(x => x.LikerId == userId && x.LikeeId == recipientId);
+        }
+
         public async Task<Photo> GetMainPhotoByUserId(int userId)
         {
             return await _context.Photos.Where(x => x.UserId == userId).FirstOrDefaultAsync(x => x.IsMain);
@@ -54,6 +59,18 @@ namespace DatingApp.API.Data
             if (!string.IsNullOrEmpty(userParams.Gender))
                 users = users.Where(x => x.Gender == userParams.Gender);
 
+            if (userParams.Likers)
+            {
+                var userLikers = await GetUserLikes(userParams.UserId, userParams.Likers);
+                users = users.Where(x => userLikers.Any(liker => liker.LikerId == x.Id));
+            }
+
+            if (userParams.Likees)
+            {
+                var userLikees = await GetUserLikes(userParams.UserId, userParams.Likers);
+                users = users.Where(x => userLikees.Any(likee => likee.LikeeId == x.Id));
+            }
+
             if (userParams.MinAge != 18 || userParams.MaxAge != 99)
             {
                 users = users.Where(x => x.DateOfBirth.CalculateAge() >= userParams.MinAge && x.DateOfBirth.CalculateAge() <= userParams.MaxAge);
@@ -73,6 +90,16 @@ namespace DatingApp.API.Data
             }
 
             return await PagedList<User>.CreateAsync(users, userParams.PageNumber, userParams.PageSize);
+        }
+
+        private async Task<IEnumerable<Like>> GetUserLikes(int id, bool likers)
+        {
+            var user = await _context.Users
+                .Include(x => x.Likee)
+                .Include(x => x.Liker)
+                .FirstOrDefaultAsync(x => x.Id == id);
+
+            return likers ? user.Likee.Where(x => x.LikeeId == id) : user.Liker.Where(x => x.LikerId == id);
         }
 
         public async Task<bool> SaveAllAsync()
